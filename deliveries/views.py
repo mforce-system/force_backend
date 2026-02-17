@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.db.models import Prefetch, Q
 
 from .models import (
     Delivery,
@@ -16,6 +17,7 @@ from .serializers import (
     DeliveryLocationSerializer,
 )
 from .permissions import IsAdmin, IsAssignedBiker
+from .location import calculate_distance, estimate_eta
 
 
 # =====================================
@@ -40,7 +42,26 @@ class DeliveryViewSet(viewsets.ModelViewSet):
         return Delivery.objects.filter(client=user)
 
     def perform_create(self, serializer):
-        serializer.save(client=self.request.user)
+        # Auto-assign the current user as the client
+        serializer.save(client=self.request.user, status="PENDING")
+
+    @action(detail=False, methods=['get'])
+    def my_deliveries(self, request):
+        """Get current user's deliveries with stats"""
+        deliveries = self.get_queryset()
+        
+        stats = {
+            'total': deliveries.count(),
+            'pending': deliveries.filter(status='PENDING').count(),
+            'in_transit': deliveries.filter(status='IN_TRANSIT').count(),
+            'delivered': deliveries.filter(status='DELIVERED').count(),
+        }
+        
+        serializer = self.get_serializer(deliveries, many=True)
+        return Response({
+            'stats': stats,
+            'deliveries': serializer.data
+        })
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsAdmin])
     def assign(self, request, pk=None):
