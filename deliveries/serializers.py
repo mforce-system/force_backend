@@ -3,14 +3,24 @@ from .models import (
     Delivery,
     DeliveryAssignment,
     DeliveryLocation,
+    Biker,
 )
+
+
+class BikerSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(source='user.email', read_only=True)
+    
+    class Meta:
+        model = Biker
+        fields = ('id', 'email', 'phone_number', 'status')
+        read_only_fields = ('status',)
 
 
 class DeliverySerializer(serializers.ModelSerializer):
     class Meta:
         model = Delivery
         fields = "__all__"
-        read_only_fields = ("status", "created_at")
+        read_only_fields = ("client", "status", "created_at")
 
 
 class DeliveryAssignmentSerializer(serializers.ModelSerializer):
