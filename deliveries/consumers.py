@@ -21,19 +21,18 @@ class TrackingConsumer(AsyncWebsocketConsumer):
             await self.close(code=4001)
             return
 
-        self.user = user
         self.delivery_id = self.scope["url_route"]["kwargs"]["delivery_id"]
         self.group_name = f"delivery_{self.delivery_id}"
 
         self.delivery = await self.get_delivery(self.delivery_id)
-
         if not self.delivery:
             await self.close(code=4004)
             return
 
-        if user.is_staff:
-            self.role = "admin"
-        else:
+        # SAFE ROLE DETECTION
+        self.role = await self.get_user_role(user)
+
+        if self.role == "biker":
             assignment = await self.get_assignment(self.delivery_id)
 
             if not assignment or not assignment.accepted:
@@ -44,7 +43,6 @@ class TrackingConsumer(AsyncWebsocketConsumer):
                 await self.close(code=4003)
                 return
 
-            self.role = "biker"
             self.biker = assignment.biker
 
         await self.channel_layer.group_add(
@@ -54,60 +52,50 @@ class TrackingConsumer(AsyncWebsocketConsumer):
 
         await self.accept()
 
-        await self.send(text_data=json.dumps({
-            "message": f"Connected to delivery {self.delivery_id} as {self.role}",
+        await self.send(json.dumps({
+            "type": "connection_established",
             "delivery_id": self.delivery_id,
-            "user_id": user.id,
             "role": self.role
         }))
 
     async def disconnect(self, close_code):
-        if hasattr(self, 'group_name'):
+        if hasattr(self, "group_name"):
             await self.channel_layer.group_discard(
                 self.group_name,
                 self.channel_name
             )
 
     async def receive(self, text_data):
-        try:
-            data = json.loads(text_data)
-        except json.JSONDecodeError:
-            return
+        data = json.loads(text_data)
 
         if self.role == "biker" and data.get("type") == "location_update":
-
             latitude = data.get("latitude")
             longitude = data.get("longitude")
 
-            if latitude is None or longitude is None:
-                return
-
             await self.save_location(latitude, longitude)
-            await self.start_delivery_if_needed()
+            await self.auto_start_delivery()
 
             await self.channel_layer.group_send(
                 self.group_name,
                 {
-                    "type": "send_delivery_location",
-                    "biker_id": self.user.id,
-                    "delivery_id": self.delivery_id,
+                    "type": "broadcast_location",
                     "latitude": latitude,
                     "longitude": longitude,
                 }
             )
 
-    async def send_delivery_location(self, event):
-        await self.send(text_data=json.dumps({
-            "type": "biker_location",
-            "delivery_id": event["delivery_id"],
-            "biker_id": event["biker_id"],
+    async def broadcast_location(self, event):
+        await self.send(json.dumps({
+            "type": "location_update",
             "latitude": event["latitude"],
             "longitude": event["longitude"],
         }))
 
-    # ======================
-    # DATABASE OPERATIONS
-    # ======================
+    async def broadcast_status(self, event):
+        await self.send(json.dumps({
+            "type": "status_update",
+            "status": event["status"],
+        }))
 
     @database_sync_to_async
     def get_delivery(self, delivery_id):
@@ -126,6 +114,16 @@ class TrackingConsumer(AsyncWebsocketConsumer):
             return None
 
     @database_sync_to_async
+    def get_user_role(self, user):
+        if user.is_staff:
+            return "admin"
+
+        if Biker.objects.filter(user=user).exists():
+            return "biker"
+
+        return "client"
+
+    @database_sync_to_async
     def save_location(self, latitude, longitude):
         DeliveryLocation.objects.create(
             delivery=self.delivery,
@@ -136,7 +134,7 @@ class TrackingConsumer(AsyncWebsocketConsumer):
         )
 
     @database_sync_to_async
-    def start_delivery_if_needed(self):
+    def auto_start_delivery(self):
         if self.delivery.status == "ASSIGNED":
             self.delivery.status = "IN_TRANSIT"
             self.delivery.save()

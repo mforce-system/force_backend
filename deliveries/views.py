@@ -89,32 +89,43 @@ class DeliveryViewSet(viewsets.ModelViewSet):
             "assignment_id": assignment.id,
         })
 
-    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
-    def mark_delivered(self, request, pk=None):
-        delivery = self.get_object()
+@action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
+def mark_delivered(self, request, pk=None):
+    delivery = self.get_object()
 
-        try:
-            assignment = DeliveryAssignment.objects.select_related(
-                "biker__user"
-            ).get(delivery=delivery)
-        except DeliveryAssignment.DoesNotExist:
-            return Response({"error": "No assignment found"}, status=400)
+    try:
+        assignment = DeliveryAssignment.objects.select_related(
+            "biker__user"
+        ).get(delivery=delivery)
+    except DeliveryAssignment.DoesNotExist:
+        return Response({"error": "No assignment found"}, status=400)
 
-        if assignment.biker.user != request.user:
-            return Response({"error": "Unauthorized"}, status=403)
+    if assignment.biker.user != request.user:
+        return Response({"error": "Unauthorized"}, status=403)
 
-        delivery.status = "DELIVERED"
-        delivery.save()
+    delivery.status = "DELIVERED"
+    delivery.save()
 
-        assignment.biker.status = "AVAILABLE"
-        assignment.biker.save()
+    assignment.biker.status = "AVAILABLE"
+    assignment.biker.save()
 
-        DeliveryLog.objects.create(
-            delivery=delivery,
-            message="Delivery completed"
-        )
+    DeliveryLog.objects.create(
+        delivery=delivery,
+        message="Delivery completed"
+    )
 
-        return Response({"message": "Delivery marked as DELIVERED"})
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f"delivery_{delivery.id}",
+        {
+            "type": "broadcast_completion"
+        }
+    )
+
+    return Response({"message": "Delivery marked as DELIVERED"})
 
 
 # =====================================
