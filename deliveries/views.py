@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.db import models
 from django.db.models import Prefetch, Q
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -68,7 +69,8 @@ class DeliveryViewSet(viewsets.ModelViewSet):
         """
         Returns a filtered queryset based on who is making the request:
         - Admins (is_staff) see all deliveries.
-        - Bikers see only deliveries assigned to them.
+        - Bikers see deliveries assigned to them AND deliveries in SEARCHING status
+          (so they can find and accept available deliveries nearby).
         - Regular clients see only their own deliveries.
         """
         user = self.request.user
@@ -77,11 +79,14 @@ class DeliveryViewSet(viewsets.ModelViewSet):
         if user.is_staff:
             return Delivery.objects.all()
 
-        # Bikers see deliveries assigned to them via their biker profile
+        # Bikers see:
+        # 1. Deliveries currently in SEARCHING status (available to accept)
+        # 2. Deliveries already assigned to them
         if hasattr(user, "biker_profile"):
             return Delivery.objects.filter(
-                assignment__biker__user=user
-            )
+                models.Q(status="SEARCHING") |
+                models.Q(assignment__biker__user=user)
+            ).distinct()
 
         # Clients see only their own deliveries
         return Delivery.objects.filter(client=user)
