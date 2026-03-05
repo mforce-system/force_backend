@@ -83,17 +83,14 @@ class Delivery(models.Model):
     def __str__(self):
         return f"Delivery {self.id} - {self.status}"
 
-
 # -------------------------
 # DELIVERY ASSIGNMENT
 # -------------------------
 class DeliveryAssignment(models.Model):
     """
     Links a Delivery to a Biker.
-    - One delivery can only have one assignment at a time (OneToOne).
-    - 'accepted' flag is set to True when the biker confirms the job.
+    - One delivery can only have one assignment at a time (OneToOne).-'accepted' flag is set to True when the biker confirms the job.
     """
-
     # Each delivery can only be assigned to one biker at a time
     delivery = models.OneToOneField(
         Delivery,
@@ -106,14 +103,12 @@ class DeliveryAssignment(models.Model):
         on_delete=models.CASCADE,
         related_name="assignments"
     )
-
     # True once the biker has explicitly accepted the delivery
     accepted = models.BooleanField(default=False)
     assigned_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Assignment: Delivery {self.delivery.id} → {self.biker.user.email}"
-
 
 # -------------------------
 # DELIVERY LOCATION
@@ -124,7 +119,6 @@ class DeliveryLocation(models.Model):
     - Each record is a snapshot of the biker's position at a point in time.
     - Used for real-time tracking and route history.
     """
-
     delivery = models.ForeignKey(
         Delivery,
         on_delete=models.CASCADE,
@@ -145,23 +139,19 @@ class DeliveryLocation(models.Model):
     def __str__(self):
         return f"Location for Delivery {self.delivery.id}"
 
-
 # -------------------------
 # DELIVERY LOG
 # -------------------------
 class DeliveryLog(models.Model):
     """
     Records key lifecycle events for a delivery.
-    - Each log entry captures a message and timestamp.
-    - Used for auditing and debugging delivery progress.
+    - Each log entry captures a message and timestamp.Used for auditing and debugging delivery progress.
     """
-
     delivery = models.ForeignKey(
         Delivery,
         on_delete=models.CASCADE,
         related_name="logs"
     )
-
     # Human-readable description of the event (e.g. "Delivery started (IN_TRANSIT)")
     message = models.CharField(max_length=255)
     timestamp = models.DateTimeField(auto_now_add=True)
