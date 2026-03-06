@@ -9,7 +9,6 @@ SEARCH_RADIUS_KM = 5
 # Minimum number of bikers to notify even if fewer are within radius
 MIN_BIKERS_TO_NOTIFY = 3
 
-
 def find_nearby_bikers(delivery):
     """
     Finds available bikers to notify about a new delivery.
