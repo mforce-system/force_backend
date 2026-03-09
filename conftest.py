@@ -95,6 +95,149 @@ def client_api_client(api_client, client_user):
     return api_client, client_user
 
 
+@pytest.fixture
+def delivery(client_user):
+    """Create a basic delivery"""
+    from deliveries.models import Delivery
+    return Delivery.objects.create(
+        client=client_user,
+        pickup_address='123 Main St',
+        dropoff_address='456 Oak Ave',
+        package_description='Test package',
+        pickup_latitude=-26.2041,
+        pickup_longitude=28.0473,
+        status='PENDING'
+    )
+
+
+@pytest.fixture
+def searching_delivery(client_user):
+    """Create a delivery in SEARCHING status"""
+    from deliveries.models import Delivery
+    return Delivery.objects.create(
+        client=client_user,
+        pickup_address='123 Main St',
+        dropoff_address='456 Oak Ave',
+        package_description='Test package',
+        pickup_latitude=-26.2041,
+        pickup_longitude=28.0473,
+        status='SEARCHING'
+    )
+
+
+@pytest.fixture
+def assigned_delivery(client_user, biker_user):
+    """Create an assigned delivery with biker"""
+    from deliveries.models import Delivery, DeliveryAssignment
+    _, biker_obj = biker_user
+    delivery_obj = Delivery.objects.create(
+        client=client_user,
+        pickup_address='123 Main St',
+        dropoff_address='456 Oak Ave',
+        package_description='Test package',
+        pickup_latitude=-26.2041,
+        pickup_longitude=28.0473,
+        status='ASSIGNED'
+    )
+    assignment = DeliveryAssignment.objects.create(
+        delivery=delivery_obj,
+        biker=biker_obj,
+        accepted=True
+    )
+    delivery_obj.assignment = assignment
+    return delivery_obj
+
+
+@pytest.fixture
+def biker(biker_user):
+    """Get the biker object from biker_user fixture"""
+    _, biker_obj = biker_user
+    return biker_obj
+
+
+@pytest.fixture
+def biker_with_location(biker_user):
+    """Create a biker with location data"""
+    user, biker_obj = biker_user
+    biker_obj.current_latitude = -26.2050
+    biker_obj.current_longitude = 28.0480
+    biker_obj.save()
+    return biker_obj
+
+
+@pytest.fixture
+def delivery_with_assignment(client_user, biker_user):
+    """Create a delivery with assignment"""
+    from deliveries.models import Delivery, DeliveryAssignment
+    _, biker_obj = biker_user
+    delivery_obj = Delivery.objects.create(
+        client=client_user,
+        pickup_address='123 Main St',
+        dropoff_address='456 Oak Ave',
+        package_description='Test package',
+        pickup_latitude=-26.2041,
+        pickup_longitude=28.0473,
+        status='ASSIGNED'
+    )
+    assignment = DeliveryAssignment.objects.create(
+        delivery=delivery_obj,
+        biker=biker_obj,
+        accepted=True
+    )
+    delivery_obj.assignment = assignment  # Attach for easy access
+    return delivery_obj
+
+
+@pytest.fixture
+def delivery_with_location(client_user, biker_user):
+    """Create a delivery with location tracking"""
+    from deliveries.models import Delivery, DeliveryAssignment, DeliveryLocation
+    _, biker_obj = biker_user
+    delivery_obj = Delivery.objects.create(
+        client=client_user,
+        pickup_address='123 Main St',
+        dropoff_address='456 Oak Ave',
+        package_description='Test package',
+        pickup_latitude=-26.2041,
+        pickup_longitude=28.0473,
+        status='IN_TRANSIT'
+    )
+    assignment = DeliveryAssignment.objects.create(
+        delivery=delivery_obj,
+        biker=biker_obj,
+        accepted=True
+    )
+    DeliveryLocation.objects.create(
+        delivery=delivery_obj,
+        biker=biker_obj,
+        latitude=-26.2045,
+        longitude=28.0478
+    )
+    delivery_obj.assignment = assignment
+    return delivery_obj
+
+
+@pytest.fixture
+def multiple_bikers():
+    """Create multiple bikers for testing nearby bikers functionality"""
+    from deliveries.models import Biker
+    bikers = []
+    for i in range(5):
+        user = User.objects.create_user(
+            email=f'biker{i}@example.com',
+            password='bikerpass123',
+            role='BIKER'
+        )
+        biker_obj = Biker.objects.create(
+            user=user,
+            status='AVAILABLE',
+            current_latitude=-26.2041 + (i * 0.001),  # Slightly different locations
+            current_longitude=28.0473 + (i * 0.001)
+        )
+        bikers.append(biker_obj)
+    return bikers
+
+
 @pytest.fixture(autouse=True)
 def clear_cache():
     """Clear cache between tests"""
